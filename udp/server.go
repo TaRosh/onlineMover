@@ -1,6 +1,7 @@
 package udp
 
 import (
+	"fmt"
 	"log"
 	"net"
 )
@@ -15,6 +16,33 @@ type server struct {
 }
 
 const TickRate = 1
+
+type NetworkServer interface {
+	SendSnapshot(data []byte) error
+}
+
+func (s *server) SendSnapshot(data []byte) error {
+	err := s.Write(SnapshotPacket, data)
+	return err
+}
+
+func (s *server) Write(t packetType, data []byte) error {
+	if s.userAddr == nil {
+		return nil
+	}
+	packet := NewPacket(s.state.id, s.state.lastIDReceived, s.state.packetsIGot, t, data)
+	fmt.Printf("Packet send: %+v\n", packet)
+	n, err := packet.Encode(s.buf)
+	if err != nil {
+		return err
+	}
+	_, err = s.conn.WriteToUDP(s.buf[:n], s.userAddr)
+	if err != nil {
+		return err
+	}
+	s.state.id += 1
+	return nil
+}
 
 func (s *server) Receive(sendPacketHere chan<- Packet) {
 	for {

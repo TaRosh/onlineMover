@@ -1,9 +1,6 @@
 package game
 
 import (
-	"image/color"
-
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/quasilyte/gmath"
 )
 
@@ -14,8 +11,6 @@ type Player struct {
 	Acceleration gmath.Vec
 	MaxSpeed     float64
 	MaxForce     float64
-	img          *ebiten.Image
-	opt          *ebiten.DrawImageOptions
 }
 
 func (p *Player) ApplyForce(force gmath.Vec) {
@@ -29,18 +24,8 @@ func (p *Player) Update() {
 	p.Acceleration = p.Acceleration.Mulf(0)
 }
 
-func (p *Player) Draw(screen *ebiten.Image) {
-	p.opt.GeoM.Reset()
-	p.opt.GeoM.Translate(p.Position.X, p.Position.Y)
-	screen.DrawImage(p.img, p.opt)
-}
-
-func NewPlayer(c color.Color) *Player {
-	img := ebiten.NewImage(10, 10)
-	img.Fill(c)
+func NewPlayer() *Player {
 	p := Player{
-		img:      img,
-		opt:      &ebiten.DrawImageOptions{},
 		MaxSpeed: 5,
 		MaxForce: 0.5,
 	}

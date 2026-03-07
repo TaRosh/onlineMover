@@ -20,5 +20,4 @@ func ApplyInput(p *Player, input Input) {
 	}
 	// p.ApplyForce(force)
 	p.Velocity = force
-	p.Update()
 }

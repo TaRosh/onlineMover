@@ -3,6 +3,7 @@ package udp
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"net"
 	"time"
 )
@@ -11,7 +12,10 @@ const headerSize = 13
 
 type packetType uint8
 
-const inputPacket packetType = iota
+const (
+	InputPacket packetType = iota
+	SnapshotPacket
+)
 
 type SentPacket struct {
 	sendedWhen time.Time
@@ -74,6 +78,7 @@ func (p *Packet) Decode(data []byte) error {
 	// p.Data = make([]byte, len(data)-headerSize)
 	// copy(p.Data, data[headerSize:])
 	p.Data = data[headerSize:]
+	fmt.Printf("CURRENT PACKET: %+v\n", p)
 	return nil
 }
 

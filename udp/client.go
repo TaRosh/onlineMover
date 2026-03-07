@@ -18,10 +18,33 @@ type client struct {
 
 type NetworkClient interface {
 	SendInput(data []byte) error
+	Receive(sendPacketHere chan<- Packet)
+}
+
+func (c *client) Receive(sendPacketHere chan<- Packet) {
+	for {
+		n, _, err := c.conn.ReadFromUDP(c.buf)
+		// if serverAddr != c.conn.RemoteAddr() {
+		// 	continue
+		// }
+		if err != nil {
+			log.Println("client:receive", err)
+			continue
+		}
+		packet := Packet{}
+		err = packet.Decode(c.buf[:n])
+		if err != nil {
+			log.Println("server:receive:packet.Decode", err)
+		}
+		c.processPacket(&packet)
+		fmt.Printf("PACKET SENDED TO CHAN: %+v\n", packet)
+		sendPacketHere <- packet
+
+	}
 }
 
 func (c *client) SendInput(data []byte) error {
-	err := c.Write(inputPacket, data)
+	err := c.Write(InputPacket, data)
 	return err
 }
 
