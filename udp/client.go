@@ -7,15 +7,6 @@ import (
 	"time"
 )
 
-// header size 12 byte
-const headerSize = 12
-
-type state struct {
-	id             uint32
-	lastIDReceived uint32
-	packetsIGot    uint32
-}
-
 type client struct {
 	packetsSend map[uint32]SentPacket
 	conn        *net.UDPConn
@@ -25,14 +16,23 @@ type client struct {
 	buf         []byte
 }
 
-func (c *client) Write(data []byte) error {
-	packet := NewPacket(c.state.id, c.state.lastIDReceived, c.state.packetsIGot, data)
-	data, err := packet.Encode()
+type NetworkClient interface {
+	SendInput(data []byte) error
+}
+
+func (c *client) SendInput(data []byte) error {
+	err := c.Write(inputPacket, data)
+	return err
+}
+
+func (c *client) Write(t packetType, data []byte) error {
+	packet := NewPacket(c.state.id, c.state.lastIDReceived, c.state.packetsIGot, t, data)
+	n, err := packet.Encode(c.buf)
 	if err != nil {
 		return err
 	}
 
-	_, err = c.conn.Write(data)
+	_, err = c.conn.Write(c.buf[:n])
 	if err != nil {
 		return err
 	}
@@ -40,7 +40,7 @@ func (c *client) Write(data []byte) error {
 		sendedWhen: time.Now(),
 		delivered:  false,
 	}
-	fmt.Printf("sending Seq: %d Ack: %d\n", packet.Sequence, packet.Ack)
+	// fmt.Printf("sending Seq: %d Ack: %d\n", packet.Sequence, packet.Ack)
 	c.id += 1
 	return nil
 }
@@ -99,13 +99,6 @@ func (c *client) processPacket(p *Packet) {
 	// check is inside our check table ( uint32 ) or we lost
 	// 32 packet and it is newer
 	// do new check table or shift for it's diff ( currentId - lastId )
-	if sentPacket, ok := c.packetsSend[p.Ack]; ok {
-		if !sentPacket.delivered {
-			rtt := time.Since(sentPacket.sendedWhen)
-			fmt.Println("RTT: ", rtt)
-			sentPacket.delivered = true
-		}
-	}
 	if isNewer(p.Sequence, c.lastIDReceived) {
 		shift := p.Sequence - c.lastIDReceived
 		if shift >= 32 {

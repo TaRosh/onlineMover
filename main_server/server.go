@@ -2,30 +2,32 @@ package main
 
 import (
 	"fmt"
+	"image/color"
 	"log"
 	"time"
 
 	"github.com/TaRosh/online_mover/game"
 	"github.com/TaRosh/online_mover/udp"
-	"github.com/quasilyte/gmath"
 )
 
 const tickTime = time.Second / 20
 
-type Player struct {
-	Pos gmath.Vec
-	Vel gmath.Vec
-	Acc gmath.Vec
+type World struct {
+	players []*game.Player
 }
 
 func main() {
 	ticker := time.Tick(tickTime)
+	world := World{}
+	world.players = append(world.players, game.NewPlayer(color.White))
+
 	s, err := udp.NewServer("9000")
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	incomingPackets := make(chan udp.Packet, 5)
+	incomingInputs := make(chan game.Input, 5)
 	go s.Receive(incomingPackets)
 	for range ticker {
 		// run network layer
@@ -33,13 +35,14 @@ func main() {
 			select {
 			case packet := <-incomingPackets:
 				// save inputs to game
-				proccessPacket(packet)
+				proccessPacket(packet, incomingInputs)
 			default:
 				goto END_NETWORK
 			}
 		}
 	END_NETWORK:
 		// update world on network inputs result
+		game.ApplyInput(world.players[0])
 		// updateWorld()
 		// send snapshot on network layer
 		// sendSnapshot()

@@ -7,6 +7,12 @@ import (
 	"time"
 )
 
+const headerSize = 13
+
+type packetType uint8
+
+const inputPacket packetType = iota
+
 type SentPacket struct {
 	sendedWhen time.Time
 	delivered  bool
@@ -16,6 +22,7 @@ type Header struct {
 	Sequence uint32
 	Ack      uint32
 	AckBits  uint32
+	Type     packetType
 }
 
 type Packet struct {
@@ -25,11 +32,12 @@ type Packet struct {
 	Addr *net.UDPAddr
 }
 
-func NewPacket(seq, ack, ackBits uint32, data []byte) *Packet {
+func NewPacket(seq, ack, ackBits uint32, t packetType, data []byte) *Packet {
 	header := Header{
 		Sequence: seq,
 		Ack:      ack,
 		AckBits:  ackBits,
+		Type:     t,
 	}
 	p := Packet{
 		Header: header,
@@ -38,14 +46,18 @@ func NewPacket(seq, ack, ackBits uint32, data []byte) *Packet {
 	return &p
 }
 
-func (p *Packet) Encode() ([]byte, error) {
-	buf := make([]byte, headerSize+len(p.Data))
+func (p *Packet) Encode(buf []byte) (int, error) {
+	packetLen := headerSize + len(p.Data)
+	if packetLen > len(buf) {
+		return 0, errors.New("given buffer is smaller than packet size ( header + data )")
+	}
 
 	binary.BigEndian.PutUint32(buf[0:4], p.Header.Sequence)
 	binary.BigEndian.PutUint32(buf[4:8], p.Header.Ack)
 	binary.BigEndian.PutUint32(buf[8:12], p.Header.AckBits)
+	buf[12] = byte(p.Header.Type)
 	copy(buf[headerSize:], p.Data)
-	return buf, nil
+	return packetLen, nil
 }
 
 func (p *Packet) Decode(data []byte) error {
@@ -56,8 +68,12 @@ func (p *Packet) Decode(data []byte) error {
 	p.Header.Sequence = binary.BigEndian.Uint32(data[0:4])
 	p.Header.Ack = binary.BigEndian.Uint32(data[4:8])
 	p.Header.AckBits = binary.BigEndian.Uint32(data[8:12])
-	p.Data = make([]byte, len(data)-headerSize)
-	copy(p.Data, data[headerSize:])
+	p.Header.Type = packetType(data[12])
+
+	// change buf allocation to get data completly
+	// p.Data = make([]byte, len(data)-headerSize)
+	// copy(p.Data, data[headerSize:])
+	p.Data = data[headerSize:]
 	return nil
 }
 

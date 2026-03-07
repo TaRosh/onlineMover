@@ -1,12 +1,8 @@
 package udp
 
 import (
-	"fmt"
 	"log"
 	"net"
-	"time"
-
-	"github.com/TaRosh/online_mover/mover"
 )
 
 type server struct {
@@ -20,7 +16,7 @@ type server struct {
 
 const TickRate = 1
 
-func (s *server) receive() {
+func (s *server) Receive(sendPacketHere chan<- Packet) {
 	for {
 		n, userAddr, err := s.conn.ReadFromUDP(s.buf)
 		if err != nil {
@@ -34,35 +30,42 @@ func (s *server) receive() {
 			log.Println("server:receive:", err)
 		}
 		s.processPacket(&packet)
+		sendPacketHere <- packet
 	}
 }
 
-func (s *server) Listen() {
-	defer s.Close()
-	go s.receive()
-	ticker := time.NewTicker(time.Second / TickRate)
-	for range ticker.C {
-		if s.userAddr == nil {
-			continue
-		}
-		outPacket := NewPacket(s.state.id, s.state.lastIDReceived, s.state.packetsIGot, nil)
-		data, err := outPacket.Encode()
-		if err != nil {
-			log.Println("Invalid data to send: ", err)
-		}
-		// echo back
+// incomingPackets := make(<-chan udp.Packet, 5)
 
-		// fmt.Printf("Ack=%d AckBits=%032b\n", outPacket.Ack, outPacket.AckBits)
-		fmt.Printf("[RECV] receved from client=%d AckBits:%b\n", outPacket.Ack, outPacket.AckBits)
-		_, err = s.conn.WriteToUDP(data, s.userAddr)
-		s.id += 1
-		if err != nil {
-			log.Println("server:Listen:write:", err)
-		}
-	}
+func (s *server) Listen() {
+	// defer s.Close()
+	// go s.receive(sendPacketHere)
+	// ticker := time.NewTicker(time.Second / TickRate)
+	// for range ticker.C {
+	// 	if s.userAddr == nil {
+	// 		continue
+	// 	}
+	// 	outPacket := NewPacket(s.state.id, s.state.lastIDReceived, s.state.packetsIGot, nil)
+	// 	n, err := outPacket.Encode(s.buf)
+	// 	if err != nil {
+	// 		log.Println("Invalid data to send: ", err)
+	// 	}
+	// 	// echo back
+	//
+	// 	// fmt.Printf("Ack=%d AckBits=%032b\n", outPacket.Ack, outPacket.AckBits)
+	// 	fmt.Printf("[RECV] receved from client=%d AckBits:%b\n", outPacket.Ack, outPacket.AckBits)
+	// 	_, err = s.conn.WriteToUDP(s.buf[:n], s.userAddr)
+	// 	s.id += 1
+	// 	if err != nil {
+	// 		log.Println("server:Listen:write:", err)
+	// 	}
+	// }
 }
 
 func (s *server) processPacket(p *Packet) {
+	// if packet id is new ( < then last id i got)
+	// check is inside our check table ( uint32 ) or we lost
+	// 32 packet and it is newer
+	// do new check table or shift for it's diff ( currentId - lastId )
 	if isNewer(p.Sequence, s.lastIDReceived) {
 		shift := p.Sequence - s.lastIDReceived
 		if shift >= 32 {
@@ -78,14 +81,13 @@ func (s *server) processPacket(p *Packet) {
 			bitIndex := diff - 1
 			s.packetsIGot |= (1 << bitIndex)
 		}
-		fmt.Printf("Already got package: %d\n", p.Sequence)
 		// if diff >= 32 {
 		// 	// TODO: package to old what to do?
 		// }
 	}
-	move := mover.Move{}
-	move.Decode(p.Data)
-	fmt.Printf("%+v\n", move)
+	// move := mover.Move{}
+	// move.Decode(p.Data)
+	// fmt.Printf("%+v\n", move)
 }
 
 func (s *server) Close() {
