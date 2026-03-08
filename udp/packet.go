@@ -3,7 +3,6 @@ package udp
 import (
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"net"
 	"time"
 )
@@ -76,9 +75,14 @@ func (p *Packet) Decode(data []byte) error {
 
 	// change buf allocation to get data completly
 	// p.Data = make([]byte, len(data)-headerSize)
-	// copy(p.Data, data[headerSize:])
-	p.Data = data[headerSize:]
-	fmt.Printf("CURRENT PACKET: %+v\n", p)
+	dataSize := len(data) - headerSize
+	if cap(p.Data) < dataSize {
+		p.Data = make([]byte, dataSize)
+	} else {
+		p.Data = p.Data[:dataSize]
+	}
+
+	copy(p.Data, data[headerSize:])
 	return nil
 }
 

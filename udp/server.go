@@ -1,7 +1,6 @@
 package udp
 
 import (
-	"fmt"
 	"log"
 	"net"
 )
@@ -9,8 +8,11 @@ import (
 type server struct {
 	conn *net.UDPConn
 
-	done bool
-	buf  []byte
+	done          bool
+	receiveBuf    []byte
+	sentBuf       []byte
+	sentPacket    *Packet
+	receivePacket *Packet
 	state
 	userAddr *net.UDPAddr
 }
@@ -22,6 +24,9 @@ type NetworkServer interface {
 }
 
 func (s *server) SendSnapshot(data []byte) error {
+	if len(data) == 0 {
+		return nil
+	}
 	err := s.Write(SnapshotPacket, data)
 	return err
 }
@@ -30,13 +35,19 @@ func (s *server) Write(t packetType, data []byte) error {
 	if s.userAddr == nil {
 		return nil
 	}
-	packet := NewPacket(s.state.id, s.state.lastIDReceived, s.state.packetsIGot, t, data)
-	fmt.Printf("Packet send: %+v\n", packet)
-	n, err := packet.Encode(s.buf)
+	if s.sentPacket == nil {
+		s.sentPacket = new(Packet)
+	}
+	s.sentPacket.Header.Sequence = s.state.id
+	s.sentPacket.Header.Ack = s.state.lastIDReceived
+	s.sentPacket.Header.AckBits = s.state.packetsIGot
+	s.sentPacket.Type = t
+	s.sentPacket.Data = data
+	n, err := s.sentPacket.Encode(s.sentBuf)
 	if err != nil {
 		return err
 	}
-	_, err = s.conn.WriteToUDP(s.buf[:n], s.userAddr)
+	_, err = s.conn.WriteToUDP(s.sentBuf[:n], s.userAddr)
 	if err != nil {
 		return err
 	}
@@ -45,49 +56,26 @@ func (s *server) Write(t packetType, data []byte) error {
 }
 
 func (s *server) Receive(sendPacketHere chan<- Packet) {
+	if s.receivePacket == nil {
+		s.receivePacket = new(Packet)
+	}
 	for {
-		n, userAddr, err := s.conn.ReadFromUDP(s.buf)
+		n, userAddr, err := s.conn.ReadFromUDP(s.receiveBuf)
 		if err != nil {
 			log.Println("server:receive", err)
 			continue
 		}
 		s.userAddr = userAddr
-		packet := Packet{}
-		err = packet.Decode(s.buf[:n])
+		err = s.receivePacket.Decode(s.receiveBuf[:n])
 		if err != nil {
 			log.Println("server:receive:", err)
 		}
-		s.processPacket(&packet)
-		sendPacketHere <- packet
+		s.processPacket(s.receivePacket)
+		sendPacketHere <- *s.receivePacket
 	}
 }
 
 // incomingPackets := make(<-chan udp.Packet, 5)
-
-func (s *server) Listen() {
-	// defer s.Close()
-	// go s.receive(sendPacketHere)
-	// ticker := time.NewTicker(time.Second / TickRate)
-	// for range ticker.C {
-	// 	if s.userAddr == nil {
-	// 		continue
-	// 	}
-	// 	outPacket := NewPacket(s.state.id, s.state.lastIDReceived, s.state.packetsIGot, nil)
-	// 	n, err := outPacket.Encode(s.buf)
-	// 	if err != nil {
-	// 		log.Println("Invalid data to send: ", err)
-	// 	}
-	// 	// echo back
-	//
-	// 	// fmt.Printf("Ack=%d AckBits=%032b\n", outPacket.Ack, outPacket.AckBits)
-	// 	fmt.Printf("[RECV] receved from client=%d AckBits:%b\n", outPacket.Ack, outPacket.AckBits)
-	// 	_, err = s.conn.WriteToUDP(s.buf[:n], s.userAddr)
-	// 	s.id += 1
-	// 	if err != nil {
-	// 		log.Println("server:Listen:write:", err)
-	// 	}
-	// }
-}
 
 func (s *server) processPacket(p *Packet) {
 	// if packet id is new ( < then last id i got)
@@ -113,9 +101,6 @@ func (s *server) processPacket(p *Packet) {
 		// 	// TODO: package to old what to do?
 		// }
 	}
-	// move := mover.Move{}
-	// move.Decode(p.Data)
-	// fmt.Printf("%+v\n", move)
 }
 
 func (s *server) Close() {
@@ -137,6 +122,7 @@ func NewServer(port string) (*server, error) {
 		state: state{
 			id: 1,
 		},
-		buf: make([]byte, 2048),
+		receiveBuf: make([]byte, 2048),
+		sentBuf:    make([]byte, 2048),
 	}, nil
 }

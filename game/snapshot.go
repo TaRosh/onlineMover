@@ -2,7 +2,6 @@ package game
 
 import (
 	"encoding/binary"
-	"fmt"
 	"math"
 
 	"github.com/quasilyte/gmath"
@@ -17,17 +16,23 @@ type PlayerState struct {
 
 // Snapshot size for len of slice uint16
 type Snapshot struct {
-	Tick    uint32
-	Players []PlayerState
+	Tick          uint32
+	LastInputTick uint32
+	Players       []PlayerState
 }
 
 func (s *Snapshot) Encode(buf []byte) (int, error) {
+	var offset int
 	// tick -> len(players) -> player state
-	binary.BigEndian.PutUint32(buf[0:4], s.Tick)
+	binary.BigEndian.PutUint32(buf[offset:], s.Tick)
+	offset += 4
+	binary.BigEndian.PutUint32(buf[offset:], s.LastInputTick)
+	offset += 4
+
 	// uint16 for len(players)
-	binary.BigEndian.PutUint16(buf[4:6], uint16(len(s.Players)))
+	binary.BigEndian.PutUint16(buf[offset:], uint16(len(s.Players)))
 	// step is 36 byte
-	offset := 6
+	offset += 2
 	for _, playerState := range s.Players {
 		binary.BigEndian.PutUint32(buf[offset:], playerState.ID)
 		offset += 4
@@ -45,10 +50,13 @@ func (s *Snapshot) Encode(buf []byte) (int, error) {
 }
 
 func (s *Snapshot) Decode(data []byte) error {
-	s.Tick = binary.BigEndian.Uint32(data[0:4])
-	counter := binary.BigEndian.Uint16(data[4:])
-	offset := 6
-	fmt.Println("Counter", counter)
+	var offset int
+	s.Tick = binary.BigEndian.Uint32(data[offset:])
+	offset += 4
+	s.LastInputTick = binary.BigEndian.Uint32(data[offset:])
+	offset += 4
+	counter := binary.BigEndian.Uint16(data[offset:])
+	offset += 2
 	s.Players = make([]PlayerState, counter)
 	for i := range counter {
 		p := PlayerState{}

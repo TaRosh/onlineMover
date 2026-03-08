@@ -1,7 +1,6 @@
 package udp
 
 import (
-	"fmt"
 	"log"
 	"net"
 	"time"
@@ -11,9 +10,12 @@ type client struct {
 	packetsSend map[uint32]SentPacket
 	conn        *net.UDPConn
 	state
-	smoothedRTT time.Duration
-	lastCleanup time.Time
-	buf         []byte
+	smoothedRTT   time.Duration
+	lastCleanup   time.Time
+	receiveBuf    []byte
+	sentBuf       []byte
+	sentPacket    *Packet
+	receivePacket *Packet
 }
 
 type NetworkClient interface {
@@ -22,8 +24,11 @@ type NetworkClient interface {
 }
 
 func (c *client) Receive(sendPacketHere chan<- Packet) {
+	if c.receivePacket == nil {
+		c.receivePacket = new(Packet)
+	}
 	for {
-		n, _, err := c.conn.ReadFromUDP(c.buf)
+		n, _, err := c.conn.ReadFromUDP(c.receiveBuf)
 		// if serverAddr != c.conn.RemoteAddr() {
 		// 	continue
 		// }
@@ -31,14 +36,12 @@ func (c *client) Receive(sendPacketHere chan<- Packet) {
 			log.Println("client:receive", err)
 			continue
 		}
-		packet := Packet{}
-		err = packet.Decode(c.buf[:n])
+		err = c.receivePacket.Decode(c.receiveBuf[:n])
 		if err != nil {
 			log.Println("server:receive:packet.Decode", err)
 		}
-		c.processPacket(&packet)
-		fmt.Printf("PACKET SENDED TO CHAN: %+v\n", packet)
-		sendPacketHere <- packet
+		c.processPacket(c.receivePacket)
+		sendPacketHere <- *c.receivePacket
 
 	}
 }
@@ -49,13 +52,20 @@ func (c *client) SendInput(data []byte) error {
 }
 
 func (c *client) Write(t packetType, data []byte) error {
-	packet := NewPacket(c.state.id, c.state.lastIDReceived, c.state.packetsIGot, t, data)
-	n, err := packet.Encode(c.buf)
+	if c.sentPacket == nil {
+		c.sentPacket = new(Packet)
+	}
+	c.sentPacket.Header.Sequence = c.state.id
+	c.sentPacket.Header.Ack = c.state.lastIDReceived
+	c.sentPacket.Header.AckBits = c.state.packetsIGot
+	c.sentPacket.Type = t
+	c.sentPacket.Data = data
+	n, err := c.sentPacket.Encode(c.sentBuf)
 	if err != nil {
 		return err
 	}
 
-	_, err = c.conn.Write(c.buf[:n])
+	_, err = c.conn.Write(c.sentBuf[:n])
 	if err != nil {
 		return err
 	}
@@ -145,29 +155,6 @@ func (c *client) processPacket(p *Packet) {
 	// check is packet in check table
 }
 
-func (c *client) Read() {
-	for {
-
-		n, _, err := c.conn.ReadFromUDP(c.buf)
-		if err != nil {
-			log.Println(err)
-		}
-		packet := Packet{}
-		err = packet.Decode(c.buf[:n])
-		if err != nil {
-			log.Println("ERROR:", err)
-		}
-
-		fmt.Printf("Receive: Seq: %d, Ack: %d, AckBits:%d\n", packet.Sequence, packet.Ack, packet.AckBits)
-		c.processPacket(&packet)
-		// fmt.Printf("Last come %d\n", c.lastIDReceived)
-		// for i := range 32 {
-		// 	fmt.Printf("[SEND] packet %d -> %b\n", packet.Ack-uint32(i), byte(packet.AckBits>>i&0x01))
-		// }
-
-	}
-}
-
 func NewClient(host, port string) (*client, error) {
 	addr, err := net.ResolveUDPAddr("udp", net.JoinHostPort(host, port))
 	if err != nil {
@@ -183,7 +170,8 @@ func NewClient(host, port string) (*client, error) {
 		state: state{
 			id: 1,
 		},
-		buf:         make([]byte, 2048),
+		receiveBuf:  make([]byte, 2048),
+		sentBuf:     make([]byte, 2048),
 		packetsSend: make(map[uint32]SentPacket),
 	}
 
