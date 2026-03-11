@@ -14,6 +14,8 @@ type packetType uint8
 const (
 	InputPacket packetType = iota
 	SnapshotPacket
+	ConnectPacket
+	AcceptPacket
 )
 
 type SentPacket struct {
