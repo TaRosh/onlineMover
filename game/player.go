@@ -4,8 +4,10 @@ import (
 	"github.com/quasilyte/gmath"
 )
 
+type PlayerID uint32
+
 type Player struct {
-	ID           uint32
+	ID           PlayerID
 	Position     gmath.Vec
 	Velocity     gmath.Vec
 	Acceleration gmath.Vec
@@ -24,8 +26,9 @@ func (p *Player) Update() {
 	p.Acceleration = p.Acceleration.Mulf(0)
 }
 
-func NewPlayer() *Player {
+func NewPlayer(id PlayerID) *Player {
 	p := Player{
+		ID:       id,
 		MaxSpeed: 5,
 		MaxForce: 0.5,
 	}

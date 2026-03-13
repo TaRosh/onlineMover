@@ -12,10 +12,11 @@ const headerSize = 13
 type packetType uint8
 
 const (
-	InputPacket packetType = iota
-	SnapshotPacket
-	ConnectPacket
-	AcceptPacket
+	PacketInvalid packetType = iota
+	PacketInput
+	PacketSnapshot
+	PacketConnect
+	PacketAccept
 )
 
 type SentPacket struct {
@@ -78,11 +79,15 @@ func (p *Packet) Decode(data []byte) error {
 	// change buf allocation to get data completly
 	// p.Data = make([]byte, len(data)-headerSize)
 	dataSize := len(data) - headerSize
-	if cap(p.Data) < dataSize {
-		p.Data = make([]byte, dataSize)
+	if dataSize == 0 {
+		p.Data = nil
 	} else {
-		p.Data = p.Data[:dataSize]
+		p.Data = make([]byte, dataSize)
 	}
+	// if cap(p.Data) < dataSize {
+	// } else {
+	// 	p.Data = p.Data[:dataSize]
+	// }
 
 	copy(p.Data, data[headerSize:])
 	return nil

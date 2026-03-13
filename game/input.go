@@ -13,19 +13,29 @@ const (
 
 // Input size total is 5 bytes
 type Input struct {
+	ID      PlayerID
 	Tick    uint32
 	Buttons uint8
 }
 
 func (i *Input) Encode(buf []byte) (int, error) {
-	binary.BigEndian.PutUint32(buf[0:4], i.Tick)
-	buf[4] = i.Buttons
+	var offset int
+	binary.BigEndian.PutUint32(buf[offset:], uint32(i.ID))
+	offset += 4
+	binary.BigEndian.PutUint32(buf[offset:], i.Tick)
+	offset += 4
+	buf[offset] = i.Buttons
+	offset += 1
 
-	return 5, nil
+	return offset, nil
 }
 
 func (i *Input) Decode(data []byte) error {
-	i.Tick = binary.BigEndian.Uint32(data[0:4])
-	i.Buttons = data[4]
+	var offset int
+	i.ID = PlayerID(binary.BigEndian.Uint32(data[offset:]))
+	offset += 4
+	i.Tick = binary.BigEndian.Uint32(data[offset:])
+	offset += 4
+	i.Buttons = data[offset]
 	return nil
 }

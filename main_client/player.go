@@ -2,9 +2,11 @@ package main
 
 import (
 	"image/color"
+	"strconv"
 
 	"github.com/TaRosh/online_mover/game"
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 )
 
 type Player struct {
@@ -16,14 +18,15 @@ type Player struct {
 func (p *Player) Draw(screen *ebiten.Image) {
 	p.opt.GeoM.Reset()
 	p.opt.GeoM.Translate(p.Position.X, p.Position.Y)
+	ebitenutil.DebugPrintAt(screen, strconv.Itoa(int(p.ID)), int(p.Position.X+5), int(p.Position.Y+5))
 	screen.DrawImage(p.img, p.opt)
 }
 
-func NewPlayer(c color.Color) *Player {
+func NewPlayer(id uint32, c color.Color) *Player {
 	img := ebiten.NewImage(10, 10)
 	img.Fill(c)
 	p := Player{
-		Player: *game.NewPlayer(),
+		Player: *game.NewPlayer(id),
 		img:    img,
 		opt:    &ebiten.DrawImageOptions{},
 	}

@@ -9,7 +9,7 @@ import (
 
 // PlayerState size is 36
 type PlayerState struct {
-	ID       uint32
+	ID       PlayerID
 	Position gmath.Vec
 	Velocity gmath.Vec
 }
@@ -34,7 +34,7 @@ func (s *Snapshot) Encode(buf []byte) (int, error) {
 	// step is 36 byte
 	offset += 2
 	for _, playerState := range s.Players {
-		binary.BigEndian.PutUint32(buf[offset:], playerState.ID)
+		binary.BigEndian.PutUint32(buf[offset:], uint32(playerState.ID))
 		offset += 4
 		binary.BigEndian.PutUint64(buf[offset:], math.Float64bits(playerState.Position.X))
 		offset += 8
@@ -60,7 +60,7 @@ func (s *Snapshot) Decode(data []byte) error {
 	s.Players = make([]PlayerState, counter)
 	for i := range counter {
 		p := PlayerState{}
-		p.ID = binary.BigEndian.Uint32(data[offset:])
+		p.ID = PlayerID(binary.BigEndian.Uint32(data[offset:]))
 		offset += 4
 
 		p.Position.X = math.Float64frombits(binary.BigEndian.Uint64(data[offset:]))

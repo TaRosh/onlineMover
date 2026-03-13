@@ -1,7 +1,7 @@
 package udp
 
 import (
-	"log"
+	"fmt"
 	"net"
 	"sync"
 	"time"
@@ -19,50 +19,43 @@ type connection struct {
 	packetsSend map[uint32]SentPacket
 	smoothedRTT time.Duration
 	lastCleanup time.Time
+	mutex       sync.Mutex
 }
-
 type host struct {
 	conn *net.UDPConn
 
 	receiveBuf []byte
 	sentBuf    []byte
 
-	sentPacket    *Packet
-	receivePacket *Packet
-	connections   map[string]*connection
+	// sentPacket    *Packet
+	// receivePacket *Packet
+	connections map[string]*connection
 
-	mu sync.Mutex
+	mu sync.RWMutex
 }
 
 type Host interface {
 	Sent(addr *net.UDPAddr, t packetType, data []byte) error
-	Receive(sendPacketHere chan<- Packet)
+	Receive(sendPacketHere chan<- Packet) error
+	GetAddr() *net.UDPAddr
+	Close()
 }
 
-/*
- */
+func (h *host) GetAddr() *net.UDPAddr {
+	return h.conn.LocalAddr().(*net.UDPAddr)
+}
+
 func (h *host) Sent(addr *net.UDPAddr, t packetType, data []byte) error {
-	if h.sentPacket == nil {
-		h.sentPacket = new(Packet)
-	}
-	conn, exist := h.connections[addr.String()]
-	if !exist {
-		//
-		if !exist {
-			// first time request to us
-			// create connection abstraction
-			conn = &connection{}
-			conn.id = 1
-			conn.packetsSend = make(map[uint32]SentPacket)
-			h.connections[addr.String()] = conn
-		}
-	}
-	h.sentPacket.Header.Sequence = conn.id
-	h.sentPacket.Header.Ack = conn.lastIDReceived
-	h.sentPacket.Header.AckBits = conn.packetsIGot
-	h.sentPacket.Type = t
-	h.sentPacket.Data = data
-	n, err := h.sentPacket.Encode(h.sentBuf)
+	packet := Packet{}
+
+	conn := h.getConnection(addr)
+
+	packet.Header.Sequence = conn.id
+	packet.Header.Ack = conn.lastIDReceived
+	packet.Header.AckBits = conn.packetsIGot
+	packet.Type = t
+	packet.Data = data
+	n, err := packet.Encode(h.sentBuf)
 	if err != nil {
 		return err
 	}
@@ -70,48 +63,62 @@ func (h *host) Sent(addr *net.UDPAddr, t packetType, data []byte) error {
 	if err != nil {
 		return err
 	}
-	// TODO: Need mutex ?
-	h.mu.Lock()
+	conn.mutex.Lock()
 	conn.packetsSend[conn.id] = SentPacket{
 		sendedWhen: time.Now(),
 		delivered:  false,
 	}
-	h.mu.Unlock()
 	conn.id += 1
+	conn.mutex.Unlock()
 	return nil
 }
 
-func (h *host) Receive(sendPacketHere chan<- Packet) {
-	if h.receivePacket == nil {
-		h.receivePacket = new(Packet)
-	}
-	for {
-		n, userAddr, err := h.conn.ReadFromUDP(h.receiveBuf)
-		if err != nil {
-			log.Println("server:receive", err)
-			continue
-		}
+func (c *connection) getSentPacket(id uint32) (SentPacket, bool) {
+	p, exist := c.packetsSend[id]
+	return p, exist
+}
 
-		conn, exist := h.connections[userAddr.String()]
-		if !exist {
-			// first time request to us
-			// create connection abstraction
-			conn = &connection{}
-			conn.id = 1
-			conn.packetsSend = make(map[uint32]SentPacket)
-			h.connections[userAddr.String()] = conn
-		}
-		h.receivePacket.Addr = userAddr
-		err = h.receivePacket.Decode(h.receiveBuf[:n])
-		if err != nil {
-			log.Println("server:receive:", err)
-		}
-		h.processPacket(conn, h.receivePacket)
-		// if packet doble just drop
+func (h *host) getConnection(addr *net.UDPAddr) *connection {
+	h.mu.RLock()
+	conn, exist := h.connections[addr.String()]
+	h.mu.RUnlock()
+	if !exist {
 
-		// continue
-		sendPacketHere <- *h.receivePacket
+		c := connection{}
+		c.id = 1
+		c.packetsSend = make(map[uint32]SentPacket)
+		h.mu.Lock()
+		h.connections[addr.String()] = &c
+		h.mu.Unlock()
+		conn = &c
 	}
+	return conn
+}
+
+func (h *host) Receive(sendPacketHere chan<- Packet) error {
+	n, userAddr, err := h.conn.ReadFromUDP(h.receiveBuf)
+	if err != nil {
+		return fmt.Errorf("transport:receive:%w", err)
+	}
+
+	conn := h.getConnection(userAddr)
+
+	packet := Packet{}
+	packet.Addr = userAddr
+	err = packet.Decode(h.receiveBuf[:n])
+	if err != nil {
+		return fmt.Errorf("transport:receive:decode: %w", err)
+	}
+	conn.mutex.Lock()
+	isDuplicate := h.processPacket(conn, &packet)
+	conn.mutex.Unlock()
+	// if packet double just drop
+	// duplicate
+	// continue
+	if !isDuplicate {
+		sendPacketHere <- packet
+	}
+	return nil
 }
 
 // check is packet id is old or new
@@ -119,30 +126,35 @@ func isNewer(a, b uint32) bool {
 	return int32(a-b) > 0
 }
 
-func (h *host) calcRtt(conn *connection, sample time.Duration) {
-	if conn.smoothedRTT == 0 {
-		conn.smoothedRTT = sample
+func (c *connection) calcRtt(sample time.Duration) {
+	if c.smoothedRTT == 0 {
+		c.smoothedRTT = sample
 	} else {
-		conn.smoothedRTT = time.Duration(float64(conn.smoothedRTT)*0.9 + float64(sample)*0.1)
+		c.smoothedRTT = time.Duration(float64(c.smoothedRTT)*0.9 + float64(sample)*0.1)
 	}
+}
+
+func (c *connection) deleteSentPacket(id uint32) {
+	delete(c.packetsSend, id)
 }
 
 func (h *host) processAck(conn *connection, header Header) {
 	// check ack & ack bits for get rtt and calculate average rtt
-	if sentPacket, ok := conn.packetsSend[header.Ack]; ok {
+
+	if sentPacket, ok := conn.getSentPacket(header.Ack); ok {
 		if !sentPacket.delivered {
 			rawRtt := time.Since(sentPacket.sendedWhen)
-			h.calcRtt(conn, rawRtt)
-			delete(conn.packetsSend, header.Ack)
+			conn.calcRtt(rawRtt)
+			conn.deleteSentPacket(header.Ack)
 		}
 	}
 	for i := range uint32(32) {
 		if (header.AckBits>>i)&1 == 1 {
-			if sentPacket, ok := conn.packetsSend[header.Ack-i]; ok {
+			if sentPacket, ok := conn.getSentPacket(header.Ack - i); ok {
 				if !sentPacket.delivered {
 					rawRtt := time.Since(sentPacket.sendedWhen)
-					h.calcRtt(conn, rawRtt)
-					delete(conn.packetsSend, header.Ack)
+					conn.calcRtt(rawRtt)
+					conn.deleteSentPacket(header.Ack - i)
 				}
 			}
 		}
@@ -153,14 +165,15 @@ func (h *host) processAck(conn *connection, header Header) {
 	if time.Since(conn.lastCleanup) > time.Second {
 		for id, sentPacket := range conn.packetsSend {
 			if time.Since(sentPacket.sendedWhen) > time.Second*3 {
-				delete(conn.packetsSend, id)
+				conn.deleteSentPacket(id)
 			}
 		}
 		conn.lastCleanup = time.Now()
 	}
 }
 
-func (h *host) processPacket(conn *connection, p *Packet) {
+// return true if it's duplicate packet
+func (h *host) processPacket(conn *connection, p *Packet) bool {
 	h.processAck(conn, p.Header)
 	// if packet id is new ( < then last id i got)
 	// check is inside our check table ( uint32 ) or we lost
@@ -177,22 +190,44 @@ func (h *host) processPacket(conn *connection, p *Packet) {
 		conn.lastIDReceived = p.Sequence
 	} else {
 		diff := conn.lastIDReceived - p.Sequence
-		if diff < 32 && diff >= 1 {
+		if diff < 32 && diff >= 0 {
 			bitIndex := diff
+			// get double
+			if conn.packetsIGot>>bitIndex&1 != 0 {
+				return true
+			}
 			conn.packetsIGot |= (1 << bitIndex)
 		}
 		// if diff >= 32 {
 		// 	// TODO: package to old what to do?
 		// }
 	}
+	return false
 }
 
 func (h *host) Close() {
 	h.conn.Close()
 }
 
-func NewServer(port string) (*host, error) {
-	addr, err := net.ResolveUDPAddr("udp", net.JoinHostPort("", port))
+func NewClient(h, port string) (*host, error) {
+	addr, err := net.ResolveUDPAddr("udp", net.JoinHostPort(h, port))
+	if err != nil {
+		return nil, err
+	}
+	conn, err := net.DialUDP("udp", nil, addr)
+	if err != nil {
+		return nil, err
+	}
+	return &host{
+		conn:        conn,
+		connections: make(map[string]*connection),
+		receiveBuf:  make([]byte, 2048),
+		sentBuf:     make([]byte, 2048),
+	}, nil
+}
+
+func NewServer(h, port string) (*host, error) {
+	addr, err := net.ResolveUDPAddr("udp", net.JoinHostPort(h, port))
 	if err != nil {
 		return nil, err
 	}

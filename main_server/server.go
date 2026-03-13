@@ -2,59 +2,75 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/TaRosh/online_mover/game"
-	"github.com/TaRosh/online_mover/udp"
+	"github.com/TaRosh/online_mover/network"
 )
 
 const tickTime = time.Second / 20
 
 type World struct {
-	players     []*game.Player
+	players     map[game.PlayerID]*game.Player
 	inputsQueue chan game.Input
-	snapshot    *game.Snapshot
-	tick        uint32
-	network     udp.NetworkServer
-	buf         []byte
+	// for now we have one event: receive new player id
+	incomingEvents chan game.PlayerID
+	snapshot       *game.Snapshot
+	tick           uint32
+	network        network.NetworkServer
+	buf            []byte
+}
+
+func (w *World) Init() {
+	w.players = make(map[game.PlayerID]*game.Player)
+	w.inputsQueue = make(chan game.Input, 1024)
+	w.incomingEvents = make(chan game.PlayerID, 1024)
+	w.snapshot = new(game.Snapshot)
+	w.tick = 0
+	network, err := network.NewServer("localhost", "9000")
+	if err != nil {
+		// can't create udp server
+		panic(err)
+	}
+	w.network = network
+	w.buf = make([]byte, 2048)
+}
+
+func (w *World) processEvent(id game.PlayerID) {
+	player := game.NewPlayer(id)
+	w.players[player.ID] = player
 }
 
 func main() {
 	ticker := time.Tick(tickTime)
 	world := World{}
-	world.players = append(world.players, game.NewPlayer())
-	world.inputsQueue = make(chan game.Input, 1024)
-	world.buf = make([]byte, 2048)
-	world.snapshot = new(game.Snapshot)
-	world.snapshot.Players = make([]game.PlayerState, len(world.players))
-
-	s, err := udp.NewServer("9000")
-	if err != nil {
-		log.Fatal(err)
-	}
-	world.network = s
-
-	incomingPackets := make(chan udp.Packet, 1024)
-	go s.Receive(incomingPackets)
+	world.Init()
+	// world.players = append(world.players, game.NewPlayer())
+	// now we don't know amount of players
+	// world.snapshot.Players = make([]game.PlayerState, len(world.players))
+	go world.network.Receive(world.inputsQueue, world.incomingEvents)
 	for range ticker {
-		// run network layer
+		// connect new players first
 		for {
 			select {
-			case packet := <-incomingPackets:
+			case newPlayerID := <-world.incomingEvents:
 				// save inputs to game
-				world.proccessPacket(packet)
+				world.processEvent(newPlayerID)
 			default:
-				goto END_NETWORK
+				goto END_EVENTS
 			}
 		}
-	END_NETWORK:
+	END_EVENTS:
 		// update world on network inputs result
 		for {
 			select {
 			case input := <-world.inputsQueue:
 				for _, p := range world.players {
-					game.ApplyInput(p, input)
+					if p.ID == input.ID {
+						game.ApplyInput(p, input)
+					}
+					// TODO: think about this can be unsync in ticks
+					// from clients?
 					world.snapshot.LastInputTick = input.Tick
 				}
 			default:
@@ -64,6 +80,7 @@ func main() {
 	END_APPLY_INPUT:
 		world.update()
 		// send snapshot on network layer
+		// time.Sleep(time.Second)
 		world.sendSnapshot()
 		world.tick += 1
 	}
@@ -71,37 +88,38 @@ func main() {
 
 func (w *World) sendSnapshot() {
 	w.snapshot.Tick = w.tick
-	for i, p := range w.players {
-		playerState := game.PlayerState{}
-		playerState.ID = uint32(i)
+	w.snapshot.Players = nil
+	playerState := game.PlayerState{}
+	for _, p := range w.players {
+		playerState.ID = p.ID
 		playerState.Position = p.Position
 		playerState.Velocity = p.Velocity
-		w.snapshot.Players[i] = playerState
+		w.snapshot.Players = append(w.snapshot.Players, playerState)
 	}
 	n, err := w.snapshot.Encode(w.buf)
 	if err != nil {
 		panic(err)
 	}
 	fmt.Println("SENT snapshot:", w.snapshot)
-	err = w.network.SendSnapshot(w.buf[:n])
-	if err != nil {
-		panic(err)
+	w.broadcastSnapshot(w.buf[:n])
+	// err = w.network.SendSnapshot(w.buf[:n])
+	// if err != nil {
+	// 	panic(err)
+	// }
+}
+
+func (w *World) broadcastSnapshot(snapshot []byte) {
+	for id := range w.players {
+		err := w.network.SendSnapshot(id, snapshot)
+		if err != nil {
+			// TODO: think about send snapshot error
+			panic(err)
+		}
 	}
 }
 
 func (w *World) update() {
 	for _, p := range w.players {
 		p.Update()
-	}
-}
-
-func (w *World) proccessPacket(packet udp.Packet) {
-	if packet.Type == udp.InputPacket {
-		var input game.Input
-		err := input.Decode(packet.Data)
-		if err != nil {
-			panic(err)
-		}
-		w.inputsQueue <- input
 	}
 }
