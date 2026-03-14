@@ -49,6 +49,7 @@ func main() {
 	// now we don't know amount of players
 	// world.snapshot.Players = make([]game.PlayerState, len(world.players))
 	go world.network.Receive(world.inputsQueue, world.incomingEvents)
+	fmt.Println("Server ready")
 	for range ticker {
 		// connect new players first
 		for {
@@ -87,6 +88,9 @@ func main() {
 }
 
 func (w *World) sendSnapshot() {
+	if len(w.players) < 1 {
+		return
+	}
 	w.snapshot.Tick = w.tick
 	w.snapshot.Players = nil
 	playerState := game.PlayerState{}
@@ -109,6 +113,7 @@ func (w *World) sendSnapshot() {
 }
 
 func (w *World) broadcastSnapshot(snapshot []byte) {
+	fmt.Println(w.players)
 	for id := range w.players {
 		err := w.network.SendSnapshot(id, snapshot)
 		if err != nil {

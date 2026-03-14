@@ -19,13 +19,13 @@ type connection struct {
 	packetsSend map[uint32]SentPacket
 	smoothedRTT time.Duration
 	lastCleanup time.Time
-	mutex       sync.Mutex
+	mutex       sync.RWMutex
 }
 type host struct {
 	conn *net.UDPConn
 
-	receiveBuf []byte
-	sentBuf    []byte
+	bufferPool sync.Pool
+	packetPool sync.Pool
 
 	// sentPacket    *Packet
 	// receivePacket *Packet
@@ -46,20 +46,36 @@ func (h *host) GetAddr() *net.UDPAddr {
 }
 
 func (h *host) Sent(addr *net.UDPAddr, t packetType, data []byte) error {
-	packet := Packet{}
+	packet := h.packetPool.Get().(*Packet)
+	defer func() {
+		*packet = Packet{}
+		h.packetPool.Put(packet)
+	}()
 
 	conn := h.getConnection(addr)
 
+	conn.mutex.RLock()
 	packet.Header.Sequence = conn.id
 	packet.Header.Ack = conn.lastIDReceived
 	packet.Header.AckBits = conn.packetsIGot
+	conn.mutex.RUnlock()
 	packet.Type = t
 	packet.Data = data
-	n, err := packet.Encode(h.sentBuf)
+	buf := h.bufferPool.Get().([]byte)
+	defer func() {
+		buf = buf[:cap(buf)]
+		h.bufferPool.Put(buf)
+	}()
+	n, err := packet.Encode(buf)
 	if err != nil {
 		return err
 	}
-	_, err = h.conn.WriteToUDP(h.sentBuf[:n], addr)
+	// client server write separation
+	if addr == nil {
+		_, err = h.conn.Write(buf[:n])
+	} else {
+		_, err = h.conn.WriteToUDP(buf[:n], addr)
+	}
 	if err != nil {
 		return err
 	}
@@ -92,31 +108,41 @@ func (h *host) getConnection(addr *net.UDPAddr) *connection {
 		h.mu.Unlock()
 		conn = &c
 	}
+
 	return conn
 }
 
 func (h *host) Receive(sendPacketHere chan<- Packet) error {
-	n, userAddr, err := h.conn.ReadFromUDP(h.receiveBuf)
+	buf := h.bufferPool.Get().([]byte)
+	defer func() {
+		buf = buf[:cap(buf)]
+		h.bufferPool.Put(buf)
+	}()
+	n, userAddr, err := h.conn.ReadFromUDP(buf)
 	if err != nil {
 		return fmt.Errorf("transport:receive:%w", err)
 	}
 
 	conn := h.getConnection(userAddr)
 
-	packet := Packet{}
+	packet := h.packetPool.Get().(*Packet)
+	defer func() {
+		*packet = Packet{}
+		h.packetPool.Put(packet)
+	}()
 	packet.Addr = userAddr
-	err = packet.Decode(h.receiveBuf[:n])
+	err = packet.Decode(buf[:n])
 	if err != nil {
 		return fmt.Errorf("transport:receive:decode: %w", err)
 	}
 	conn.mutex.Lock()
-	isDuplicate := h.processPacket(conn, &packet)
+	isDuplicate := h.processPacket(conn, packet)
 	conn.mutex.Unlock()
 	// if packet double just drop
 	// duplicate
 	// continue
 	if !isDuplicate {
-		sendPacketHere <- packet
+		sendPacketHere <- *packet
 	}
 	return nil
 }
@@ -221,8 +247,16 @@ func NewClient(h, port string) (*host, error) {
 	return &host{
 		conn:        conn,
 		connections: make(map[string]*connection),
-		receiveBuf:  make([]byte, 2048),
-		sentBuf:     make([]byte, 2048),
+		packetPool: sync.Pool{
+			New: func() any {
+				return &Packet{}
+			},
+		},
+		bufferPool: sync.Pool{
+			New: func() any {
+				return make([]byte, 1024)
+			},
+		},
 	}, nil
 }
 
@@ -239,7 +273,15 @@ func NewServer(h, port string) (*host, error) {
 	return &host{
 		conn:        conn,
 		connections: make(map[string]*connection),
-		receiveBuf:  make([]byte, 2048),
-		sentBuf:     make([]byte, 2048),
+		packetPool: sync.Pool{
+			New: func() any {
+				return &Packet{}
+			},
+		},
+		bufferPool: sync.Pool{
+			New: func() any {
+				return make([]byte, 1024)
+			},
+		},
 	}, nil
 }

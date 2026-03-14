@@ -18,12 +18,12 @@ type NetworkClient interface {
 }
 
 func (c *client) SendPlayerConnectionRequest() error {
-	err := c.transport.Sent(c.transport.GetAddr(), udp.PacketConnect, nil)
+	err := c.transport.Sent(nil, udp.PacketConnect, nil)
 	return err
 }
 
 func (c *client) SendInput(data []byte) error {
-	err := c.transport.Sent(c.transport.GetAddr(), udp.PacketInput, data)
+	err := c.transport.Sent(nil, udp.PacketInput, data)
 	return err
 }
 
@@ -54,13 +54,15 @@ func (c *client) processPacket(packet *udp.Packet, snapshots chan<- game.Snapsho
 }
 
 func (c *client) Receive(snapshots chan<- game.Snapshot, connectionEvent chan<- game.PlayerID) {
-	var sendPacketHere chan udp.Packet
+	sendPacketHere := make(chan udp.Packet, 1024)
 	go func() {
 		for {
 			err := c.transport.Receive(sendPacketHere)
 			// TODO: think about case when error from receive
-			log.Println(err)
-			continue
+			if err != nil {
+				log.Println(err)
+				continue
+			}
 		}
 	}()
 	for packet := range sendPacketHere {

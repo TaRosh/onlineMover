@@ -22,7 +22,7 @@ func (p *Player) Draw(screen *ebiten.Image) {
 	screen.DrawImage(p.img, p.opt)
 }
 
-func NewPlayer(id uint32, c color.Color) *Player {
+func NewPlayer(id game.PlayerID, c color.Color) *Player {
 	img := ebiten.NewImage(10, 10)
 	img.Fill(c)
 	p := Player{

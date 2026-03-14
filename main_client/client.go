@@ -3,12 +3,10 @@ package main
 import (
 	"fmt"
 	"image/color"
-	"log"
 	"time"
 
 	"github.com/TaRosh/online_mover/game"
 	"github.com/TaRosh/online_mover/network"
-	"github.com/TaRosh/online_mover/udp"
 	"github.com/hajimehoshi/ebiten/v2"
 )
 
@@ -17,14 +15,17 @@ type Game struct {
 	Height                   int
 	Network                  network.NetworkClient
 	lastSnapshotForReconcile *game.Snapshot
-	snapshotQueue            []*game.Snapshot
-	inputsHistory            []game.Input
+
+	// snapshotQueue []*game.Snapshot
+	snapshotQueue    chan game.Snapshot
+	connectionEvents chan game.PlayerID
+	inputsHistory    []game.Input
 
 	Tick uint32
 	buf  []byte
 	// separate becouse we want recocilate
 	localPlayer *Player
-	players     map[uint32]*Player
+	players     map[game.PlayerID]*Player
 	// debugPlayer *Player
 }
 
@@ -49,10 +50,10 @@ func (g *Game) Update() error {
 	// catch packets
 	for {
 		select {
-		case packet := <-g.incomingPackets:
+		case snapshot := <-g.snapshotQueue:
 			// save snapshot in queue
 			// save last snapshot for reconcile
-			g.processPacket(packet)
+			g.lastSnapshotForReconcile = &snapshot
 		default:
 			goto END_NETWORK
 		}
@@ -143,29 +144,6 @@ func (g *Game) reapplyPossitionFromSnapshot(player game.PlayerState) {
 	// fmt.Println("DEBUG PLAYER POS", g.debugPlayer.Position)
 }
 
-func (g *Game) processPacket(packet udp.Packet) {
-	// first we need get our connectian accept from server
-	// server give our player ID ! ! ! ( MATER )
-	if g.localPlayer == nil && packet.Type != udp.AcceptPacket {
-		// we don't have local player and still don't get
-		// answer for our playerID request
-		// maybe resend after some time?
-		return
-	}
-
-	if packet.Type == udp.SnapshotPacket {
-		snapshot := game.Snapshot{}
-		err := snapshot.Decode(packet.Data)
-		if err != nil {
-			log.Fatal("precessPacket:packet.Decode", err)
-		}
-		// fmt.Println("Snapshot received:", snapshot)
-		// NOT CHANGE SNAPSHOT ITSELF BECOUSE IT'S POINTER!!!
-		g.snapshotQueue = append(g.snapshotQueue, &snapshot)
-		g.lastSnapshotForReconcile = &snapshot
-	}
-}
-
 func (g *Game) connectPlayerToServer() {
 	tries := 4
 	// time after we resend connection request
@@ -182,23 +160,14 @@ TRY_GET_PLAYER_ID_AGAIN:
 		time.Sleep(time.Millisecond * 50)
 		goto TRY_GET_PLAYER_ID_AGAIN
 	}
-	// another try when not answer from server
+	// another try when no answer from server
 	for {
 		select {
-		case p := <-g.incomingPackets:
-			if p.Type != udp.AcceptPacket {
-				break
-			}
-			id := game.PlayerIDPacket{}
-			err := id.Decode(p.Data)
-			if err != nil {
-				// can't decode my id
-				panic(err)
-			}
-			fmt.Println("MY ID", id.ID)
-			player := NewPlayer(id.ID, color.White)
+		case id := <-g.connectionEvents:
+			fmt.Println("MY ID", id)
+			player := NewPlayer(id, color.White)
 			g.localPlayer = player
-			g.players[id.ID] = player
+			g.players[id] = player
 			return
 		case <-resendAfter:
 			tries--
@@ -207,24 +176,30 @@ TRY_GET_PLAYER_ID_AGAIN:
 	}
 }
 
+func (g *Game) Init() {
+	g.Width, g.Height = ebiten.WindowSize()
+	g.players = make(map[game.PlayerID]*Player)
+	network, err := network.NewClient("localhost", "9000")
+	if err != nil {
+		// TODO: think about reconnect to server
+		panic(err)
+	}
+	g.Network = network
+	g.snapshotQueue = make(chan game.Snapshot, 1024)
+	g.connectionEvents = make(chan game.PlayerID, 1024)
+	g.Tick = 0
+	g.buf = make([]byte, 1024)
+}
+
 func main() {
 	var err error
 	g := Game{}
-	g.Width, g.Height = ebiten.WindowSize()
-	g.players = make(map[uint32]*Player)
-	// g.debugPlayer = NewPlayer(color.RGBA{0xff, 0, 0, 0xff})
-	g.Network, err = udp.NewClient("localhost", "9000")
-	g.incomingPackets = make(chan udp.Packet, 1024)
+	g.Init()
 	// g.snapshotQueue = make(chan *game.Snapshot, 1024)
 	// send request about connect player to server
-	go g.Network.Receive(g.incomingPackets)
+	go g.Network.Receive(g.snapshotQueue, g.connectionEvents)
 	g.connectPlayerToServer()
 
-	// now we need receive snapshot
-	g.buf = make([]byte, 1024)
-	if err != nil {
-		panic(err)
-	}
 	// change tick on client side?
 	ebiten.SetTPS(20)
 	err = ebiten.RunGame(&g)

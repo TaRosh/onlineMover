@@ -108,11 +108,10 @@ func TestSentFunction(t *testing.T) {
 	defer client.Close()
 
 	packets := make(chan Packet, 10)
-	buf := make([]byte, 1024)
 
 	go server.Receive(packets)
 
-	err = client.Sent(server.conn.LocalAddr().(*net.UDPAddr), PacketConnect, buf)
+	err = client.Sent(server.conn.LocalAddr().(*net.UDPAddr), PacketConnect, nil)
 	require.NoError(t, err)
 
 	// Test:

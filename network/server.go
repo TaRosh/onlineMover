@@ -117,12 +117,13 @@ func (s *server) sentPlayerID(addr *net.UDPAddr, data []byte) error {
 
 // i think for now will use chan for each event from client
 func (s *server) Receive(inputHere chan<- game.Input, connectEventHere chan<- game.PlayerID) {
-	var sendPacketHere chan udp.Packet
+	sendPacketHere := make(chan udp.Packet, 1024)
 	go func() {
 		for {
 			err := s.transport.Receive(sendPacketHere)
-			log.Println(err)
-			continue
+			if err != nil {
+				log.Println(err)
+			}
 		}
 	}()
 	for packet := range sendPacketHere {
@@ -138,7 +139,10 @@ func (s *server) SendSnapshot(id game.PlayerID, data []byte) error {
 	if !exist {
 		return fmt.Errorf("Network:SendSnapsho: no addr for this id: %d", id)
 	}
-	err := s.transport.Sent(s.idToAddr[id], udp.PacketSnapshot, data)
+	s.mu.RLock()
+	addr := s.idToAddr[id]
+	s.mu.RUnlock()
+	err := s.transport.Sent(addr, udp.PacketSnapshot, data)
 
 	return err
 }
@@ -146,7 +150,12 @@ func (s *server) SendSnapshot(id game.PlayerID, data []byte) error {
 var _ NetworkServer = new(server)
 
 func NewServer(host, port string) (*server, error) {
-	serv := server{}
+	serv := server{
+		addrToID:         make(map[string]game.PlayerID),
+		idToAddr:         make(map[game.PlayerID]*net.UDPAddr),
+		nextConnectionID: 0,
+		sentBuf:          make([]byte, 1024),
+	}
 	transport, err := udp.NewServer(host, port)
 	if err != nil {
 		return nil, err
