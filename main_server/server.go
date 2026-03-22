@@ -8,6 +8,7 @@ import (
 	"github.com/TaRosh/online_mover/game"
 	"github.com/TaRosh/online_mover/network"
 	"github.com/joho/godotenv"
+	"github.com/quasilyte/gmath"
 )
 
 const tickTime = time.Second / 20
@@ -62,7 +63,9 @@ func (w *World) processEvent(event game.Event) {
 func (w *World) spawnBullet(p *game.Player) {
 	b := game.NewBullet(w.bulletNextID)
 	b.Position = p.Position
-	b.Velocity.X = 10
+	direction := p.Rotation
+	b.Velocity = gmath.Vec{X: direction.Cos(), Y: direction.Sin()}.Mulf(5)
+	// b.Velocity.X = 10
 
 	w.bullets[w.bulletNextID] = b
 	w.bulletNextID += 1

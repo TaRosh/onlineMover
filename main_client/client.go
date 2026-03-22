@@ -127,7 +127,8 @@ func (g *Game) processSnapshot(snapshot *game.Snapshot) {
 	for _, player := range snapshot.Players {
 		_, exist := g.players[player.ID]
 		if !exist {
-			p := NewPlayer(player.ID, color.RGBA{0xff, 0, 0, 0xff})
+			p, _ := NewPlayer(player.ID, color.RGBA{0xff, 0, 0, 0xff})
+			// TODO: check error
 			stateToPlayer(p, player)
 			g.players[player.ID] = p
 			fmt.Println("HERE CREATE PLAYER ")
@@ -286,7 +287,8 @@ TRY_GET_PLAYER_ID_AGAIN:
 			if event.Type == game.EventConnection {
 				id := event.ID
 				fmt.Println("MY ID", id)
-				player := NewPlayer(id, color.White)
+				player, _ := NewPlayer(id, color.White)
+				// TODO: check error
 				g.localPlayer = player
 				g.players[id] = player
 			}

@@ -11,6 +11,8 @@ type Player struct {
 	Position     gmath.Vec
 	Velocity     gmath.Vec
 	Acceleration gmath.Vec
+	Rotation     gmath.Rad
+
 	LastFireTick uint32
 	MaxSpeed     float64
 	MaxForce     float64
@@ -23,6 +25,9 @@ func (p *Player) ApplyForce(force gmath.Vec) {
 func (p *Player) Update() {
 	p.Velocity = p.Velocity.Add(p.Acceleration)
 	p.Velocity = p.Velocity.ClampLen(p.MaxSpeed)
+	if p.Velocity.Len() > 0.001 {
+		p.Rotation = p.Velocity.Angle()
+	}
 	p.Position = p.Position.Add(p.Velocity)
 	p.Acceleration = p.Acceleration.Mulf(0)
 }

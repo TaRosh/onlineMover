@@ -1,0 +1,30 @@
+//kage:unit pixels
+
+package main
+
+var HP float
+
+func edge (p ,a,  b vec2) float{
+return (p.x -a.x)*(b.y - a.y) - (p.y -a.y) *(b.x -a.x)
+}
+
+
+func Fragment(pos vec4, texCoord vec2, _ vec4) vec4 {
+size := imageDstSize()
+p := texCoord.xy
+a := vec2(0.5 * size.x, 0.1 * size.y)
+b := vec2(0.1 * size.x, 1 * size.y)
+c := vec2(0.9 * size.x, 1 * size.y)
+
+e1 := edge(p, a ,b )
+e2 := edge(p ,b, c)
+e3 := edge(p, c, a)
+
+inside := (e1 >= 0.0 && e2 >= 0.0 && e3 >=0.0) || (e1 <= 0.0 && e2 <= 0.0 && e3 <= 0.0)
+if inside {
+t := HP
+col := mix(vec3(1,0,0) , vec3(0,1,0 ), t)
+return vec4(col, 1.0)
+}
+return vec4(0)
+}
