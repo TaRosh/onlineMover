@@ -31,24 +31,6 @@ const (
 	serverKeyForClient = "server"
 )
 
-type state struct {
-	id             uint32
-	lastIDReceived uint32
-	packetsIGot    uint32
-}
-
-type connection struct {
-	state
-	Addr        *net.UDPAddr
-	packetsSend map[uint32]SentPacket
-	smoothedRTT time.Duration
-
-	// where we last time receive packet from that connection
-	lastHeared  time.Time
-	lastCleanup time.Time
-	mutex       sync.RWMutex
-}
-
 type host struct {
 	conn *net.UDPConn
 
@@ -57,103 +39,13 @@ type host struct {
 
 	// sentPacket    *Packet
 	// receivePacket *Packet
-	connections map[string]*connection
-
-	mu sync.RWMutex
-}
-
-type serverHost struct {
-	*host
-}
-
-type clientHost struct {
-	*host
-}
-
-func (sh *serverHost) Send(addr *net.UDPAddr, t packetType, data []byte) error {
-	key := addr.String()
-	conn := sh.getConnection(key, addr)
-	err := sh.send(conn, t, data)
-	return err
-}
-
-func (ch *clientHost) Send(t packetType, data []byte) error {
-	key := serverKeyForClient
-	conn := ch.getConnection(key, nil)
-	err := ch.send(conn, t, data)
-	return err
-}
-
-func (sh *serverHost) Receive(sendPacketHere chan<- Packet) error {
-	buf := sh.bufferPool.Get().([]byte)
-	defer func() {
-		buf = buf[:cap(buf)]
-		sh.bufferPool.Put(buf)
-	}()
-	n, playerAddr, err := sh.conn.ReadFromUDP(buf)
-	if err != nil {
-		return err
-	}
-	key := playerAddr.String()
-	conn := sh.getConnection(key, playerAddr)
-	fmt.Println("RECV packet")
-	err = sh.processRawPacket(conn, buf[:n], sendPacketHere)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (ch *clientHost) Receive(sendPacketHere chan<- Packet) error {
-	buf := ch.bufferPool.Get().([]byte)
-	defer func() {
-		buf = buf[:cap(buf)]
-		ch.bufferPool.Put(buf)
-	}()
-	n, serverAddr, err := ch.conn.ReadFromUDP(buf)
-	if err != nil {
-		return err
-	}
-	key := serverKeyForClient
-	conn := ch.getConnection(key, serverAddr)
-	err = ch.processRawPacket(conn, buf[:n], sendPacketHere)
-	if err != nil {
-		return err
-	}
-	return nil
 }
 
 func (h *host) GetAddr() *net.UDPAddr {
 	return h.conn.LocalAddr().(*net.UDPAddr)
 }
 
-func (h *host) DeleteConn(id *net.UDPAddr) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if id == nil {
-		panic("delete conn")
-	}
-	delete(h.connections, id.String())
-}
-
-func (h *host) CheckTimeouts(noAnswerAddrHere chan<- *net.UDPAddr) {
-	defer close(noAnswerAddrHere)
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	for _, conn := range h.connections {
-		conn.mutex.RLock()
-		lastTimeHeared := conn.lastHeared
-		fmt.Println(time.Since(lastTimeHeared))
-		conn.mutex.RUnlock()
-		if time.Since(lastTimeHeared) > 5*time.Second {
-			if conn.Addr == nil {
-				panic("checkTimeouts")
-			}
-			noAnswerAddrHere <- conn.Addr
-		}
-	}
-}
-
+// send encrypted data
 func (h *host) send(conn *connection, t packetType, data []byte) error {
 	packet := h.packetPool.Get().(*Packet)
 	defer func() {
@@ -161,29 +53,53 @@ func (h *host) send(conn *connection, t packetType, data []byte) error {
 		h.packetPool.Put(packet)
 	}()
 
+	//*** SET PACKET
 	conn.mutex.RLock()
-	packet.Header.Sequence = conn.id
-	packet.Header.Ack = conn.lastIDReceived
-	packet.Header.AckBits = conn.packetsIGot
+	packetState := conn.packetState
+	packet.PrivateHeader.Sequence = packetState.id
+	packet.PrivateHeader.Ack = packetState.lastIDReceived
+	packet.PrivateHeader.AckBits = packetState.packetsIGot
+
+	packet.PublicHeader.ConnectionID = conn.id
 	conn.mutex.RUnlock()
-	packet.Type = t
+	packet.PrivateHeader.Type = t
+	packet.PublicHeader.SeqShort = uint16(packet.PrivateHeader.Sequence)
+
 	packet.Data = data
+	// **** END OF SET PACKET
+
 	buf := h.bufferPool.Get().([]byte)
 	defer func() {
 		buf = buf[:cap(buf)]
 		h.bufferPool.Put(buf)
 	}()
-	fmt.Println("SENT packet:", packet)
-	n, err := packet.Encode(buf)
-	if err != nil {
-		return err
+	fmt.Printf("SENT packet: %+v\n", packet)
+	var err error
+	var n int
+	if conn.getEncryptionState() != EncryptionSecure {
+		// send raw
+		// n = h.encodePacket
+		n, err = packet.Encode(buf)
+		if err != nil {
+			return fmt.Errorf("host:send: %w", err)
+		}
+	} else {
+		// encrypt packet
+
+		n, err = conn.encryptPacket(buf, packet)
+		if err != nil {
+			return fmt.Errorf("host:send: %w", err)
+		}
 	}
+	fmt.Println(n)
+
 	// client server write separation
 	if conn.Addr == nil {
 		_, err = h.conn.Write(buf[:n])
 	} else {
 		_, err = h.conn.WriteToUDP(buf[:n], conn.Addr)
 	}
+
 	if err != nil {
 		return err
 	}
@@ -202,33 +118,6 @@ func (c *connection) getSentPacket(id uint32) (SentPacket, bool) {
 	return p, exist
 }
 
-// Give existed or create new connection
-func (h *host) getConnection(key string, addr *net.UDPAddr) *connection {
-	h.mu.RLock()
-	conn, exist := h.connections[key]
-	h.mu.RUnlock()
-	if exist {
-		return conn
-	}
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	conn, exist = h.connections[key]
-	if exist {
-		return conn
-	}
-
-	conn = &connection{
-		state: state{
-			id: 1,
-		},
-		packetsSend: make(map[uint32]SentPacket),
-		Addr:        addr,
-	}
-	h.connections[key] = conn
-
-	return conn
-}
-
 func (h *host) processRawPacket(conn *connection, data []byte, sendPacketHere chan<- Packet) error {
 	packet := h.packetPool.Get().(*Packet)
 	defer func() {
@@ -236,13 +125,65 @@ func (h *host) processRawPacket(conn *connection, data []byte, sendPacketHere ch
 		h.packetPool.Put(packet)
 	}()
 	packet.Addr = conn.Addr
-	err := packet.Decode(data)
+	// TODO: add key exchange start
+	// check key request or answer
+	_, err := packet.Header.Decode(data[:headerSize])
 	if err != nil {
-		return fmt.Errorf("transport:receive:decode: %w", err)
+		return fmt.Errorf("host:proccessRawPacket: %w", err)
 	}
+	if packet.PublicHeader.ConnectionID == 0 {
+		packet.PublicHeader.ConnectionID = conn.id
+	} else {
+		conn.id = packet.PublicHeader.ConnectionID
+	}
+
+	fmt.Printf("Connection: %+v\n", conn)
+	switch conn.encryptionState {
+	case EncryptionUnsecure:
+		packet.Data = data[headerSize:]
+
+	case EncryptionSecure:
+		// decrypt data first
+		nonce := conn.makeNonce(packet.Header.Sequence)
+		plainText, err := conn.decrypt(data[:headerSize], data[headerSize:], nonce)
+		if err != nil {
+			return fmt.Errorf("host:proccessRawPacket: %w", err)
+		}
+		packet.Data = plainText
+
+	}
+	// we server end get public key from client
+	switch packet.Header.Type {
+	case PacketKeyExchangeRequest:
+		// packet.Data is a publicKey of the opposite side
+		// generate private and public key for this connection on my side
+		// use packet.Data ( public key ) to make shared key for connection
+		// and from shared i create gcm
+		err := h.handleEncryptionRequest(conn, packet.Data)
+		if err != nil {
+			return fmt.Errorf("host:proccessRawPacket: %w", err)
+		}
+		// TODO: think about not return here becouse after we process
+		// seq, ack etc bits from packet header
+	case PacketKeyExchangeAnswer:
+		// we client and get public key from server
+		err := h.handleEncryptionResponse(conn, packet.Data)
+		if err != nil {
+			return fmt.Errorf("host:proccessRawPacket: %w", err)
+		}
+	}
+	// if packet not part encryption exchange
+	// then it is raw packet ( if connection not secure )
+	// or encrypted packet ( if connection secure )
+
+	// Here packet should be decoded and encrypted
+
+	fmt.Printf("RECV packet: %+v\n", packet)
+
 	conn.mutex.Lock()
 	conn.lastHeared = time.Now()
 	isDuplicate := h.processPacket(conn, packet)
+
 	conn.mutex.Unlock()
 	// if packet double just drop
 	// duplicate
@@ -252,40 +193,6 @@ func (h *host) processRawPacket(conn *connection, data []byte, sendPacketHere ch
 	}
 	return nil
 }
-
-// func (h *host) receive(conn *connection, sendPacketHere chan<- Packet) error {
-// 	buf := h.bufferPool.Get().([]byte)
-// 	defer func() {
-// 		buf = buf[:cap(buf)]
-// 		h.bufferPool.Put(buf)
-// 	}()
-// 	n, userAddr, err := h.conn.ReadFromUDP(buf)
-// 	if err != nil {
-// 		return fmt.Errorf("transport:receive:%w", err)
-// 	}
-//
-// 	packet := h.packetPool.Get().(*Packet)
-// 	defer func() {
-// 		*packet = Packet{}
-// 		h.packetPool.Put(packet)
-// 	}()
-// 	packet.Addr = userAddr
-// 	err = packet.Decode(buf[:n])
-// 	if err != nil {
-// 		return fmt.Errorf("transport:receive:decode: %w", err)
-// 	}
-// 	conn.mutex.Lock()
-// 	conn.lastHeared = time.Now()
-// 	isDuplicate := h.processPacket(conn, packet)
-// 	conn.mutex.Unlock()
-// 	// if packet double just drop
-// 	// duplicate
-// 	// continue
-// 	if !isDuplicate {
-// 		sendPacketHere <- *packet
-// 	}
-// 	return nil
-// }
 
 // check is packet id is old or new
 func isNewer(a, b uint32) bool {
@@ -377,8 +284,7 @@ func (h *host) Close() {
 
 func newHost(conn *net.UDPConn) *host {
 	return &host{
-		conn:        conn,
-		connections: make(map[string]*connection),
+		conn: conn,
 		packetPool: sync.Pool{
 			New: func() any {
 				return &Packet{}
@@ -390,34 +296,4 @@ func newHost(conn *net.UDPConn) *host {
 			},
 		},
 	}
-}
-
-func NewClient(h, port string) (*clientHost, error) {
-	addr, err := net.ResolveUDPAddr("udp", net.JoinHostPort(h, port))
-	if err != nil {
-		return nil, err
-	}
-	conn, err := net.DialUDP("udp", nil, addr)
-	if err != nil {
-		return nil, err
-	}
-	clntHost := &clientHost{
-		newHost(conn),
-	}
-	return clntHost, nil
-}
-
-func NewServer(h, port string) (*serverHost, error) {
-	addr, err := net.ResolveUDPAddr("udp", net.JoinHostPort(h, port))
-	if err != nil {
-		return nil, err
-	}
-	conn, err := net.ListenUDP("udp", addr)
-	if err != nil {
-		return nil, err
-	}
-	srvHost := &serverHost{
-		newHost(conn),
-	}
-	return srvHost, nil
 }

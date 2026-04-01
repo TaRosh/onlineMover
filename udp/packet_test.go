@@ -9,14 +9,21 @@ import (
 func TestPacketEncodeDecode(t *testing.T) {
 	// we skip addr for packet becouse it set inside server
 	// Test: equality with data
-	original := Packet{
-		Header: Header{
+	header := Header{
+		PublicHeader: PublicHeader{
+			ConnectionID: 0,
+			SeqShort:     0,
+		},
+		PrivateHeader: PrivateHeader{
 			Sequence: 10,
 			Ack:      8,
 			AckBits:  0b11111111,
 			Type:     PacketConnect,
 		},
-		Data: []byte{1, 2, 3, 4},
+	}
+	original := Packet{
+		Header: header,
+		Data:   []byte{1, 2, 3, 4},
 	}
 	buf := make([]byte, 1024)
 	n, err := original.Encode(buf)
@@ -28,13 +35,16 @@ func TestPacketEncodeDecode(t *testing.T) {
 	require.Equal(t, original, decoded)
 
 	// Test: equality with no data field
-	original = Packet{
-		Header: Header{
+	header = Header{
+		PrivateHeader: PrivateHeader{
 			Sequence: 10,
 			Ack:      8,
 			AckBits:  0b11111111,
 			Type:     PacketConnect,
 		},
+	}
+	original = Packet{
+		Header: header,
 	}
 	buf = make([]byte, 1024)
 	n, err = original.Encode(buf)
