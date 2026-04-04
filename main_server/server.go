@@ -37,7 +37,7 @@ func (w *World) Init() {
 	w.incomingEvents = make(chan game.Event, 1024)
 	w.currentSnapshot = new(game.Snapshot)
 	w.tick = 0
-	network, err := network.NewServer(os.Getenv("S_HOST"), os.Getenv("S_PORT"))
+	network, err := network.NewServer(os.Getenv("S_HOST"), os.Getenv("S_PORT"), []byte(os.Getenv("ENC_KEY")))
 	if err != nil {
 		// can't create udp server
 		panic(err)

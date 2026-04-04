@@ -10,6 +10,7 @@ func TestSnapshotEncodeDecode(t *testing.T) {
 	original := Snapshot{
 		Tick:          4,
 		LastInputTick: 2,
+		Full:          0,
 		Players: []PlayerState{
 			{
 				ID: 0,

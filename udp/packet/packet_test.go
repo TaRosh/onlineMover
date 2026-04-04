@@ -1,4 +1,4 @@
-package udp
+package packet
 
 import (
 	"testing"
@@ -12,13 +12,12 @@ func TestPacketEncodeDecode(t *testing.T) {
 	header := Header{
 		PublicHeader: PublicHeader{
 			ConnectionID: 0,
-			SeqShort:     0,
+			Sequence:     10,
 		},
 		PrivateHeader: PrivateHeader{
-			Sequence: 10,
-			Ack:      8,
-			AckBits:  0b11111111,
-			Type:     PacketConnect,
+			Ack:     8,
+			AckBits: 0b11111111,
+			Type:    Connect,
 		},
 	}
 	original := Packet{
@@ -36,11 +35,14 @@ func TestPacketEncodeDecode(t *testing.T) {
 
 	// Test: equality with no data field
 	header = Header{
+		PublicHeader: PublicHeader{
+			ConnectionID: 0,
+			Sequence:     10,
+		},
 		PrivateHeader: PrivateHeader{
-			Sequence: 10,
-			Ack:      8,
-			AckBits:  0b11111111,
-			Type:     PacketConnect,
+			Ack:     8,
+			AckBits: 0b11111111,
+			Type:    Connect,
 		},
 	}
 	original = Packet{

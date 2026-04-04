@@ -47,7 +47,7 @@ func TestInterpolationFromSnapshot(t *testing.T) {
 			ID: playerID,
 		},
 	}
-	pos := g.playerInterpolation(player)
+	pos := g.playerInterpolation(g.snapshotBuffer[0], g.snapshotBuffer[1], 0.5, player)
 	require.Equal(t, float64(5), pos.X)
 
 	/*
@@ -80,7 +80,7 @@ func TestInterpolationFromSnapshot(t *testing.T) {
 			},
 		},
 	}
-	pos = g.playerInterpolation(player)
+	pos = g.playerInterpolation(g.snapshotBuffer[0], g.snapshotBuffer[1], 0, player)
 	require.Equal(t, float64(0), pos.X)
 
 	// Test: alpha 1: end snapshot
@@ -108,7 +108,7 @@ func TestInterpolationFromSnapshot(t *testing.T) {
 			},
 		},
 	}
-	pos = g.playerInterpolation(player)
+	pos = g.playerInterpolation(g.snapshotBuffer[0], g.snapshotBuffer[1], 1, player)
 	require.Equal(t, float64(10), pos.X)
 	// Test: diagonal move
 	g.lastServerTick = 102
@@ -135,13 +135,13 @@ func TestInterpolationFromSnapshot(t *testing.T) {
 			},
 		},
 	}
-	pos = g.playerInterpolation(player)
+	pos = g.playerInterpolation(g.snapshotBuffer[0], g.snapshotBuffer[1], 0.5, player)
 	require.Equal(t, float64(5), pos.X)
 	require.Equal(t, float64(5), pos.Y)
 
 	// Test: no snapshot case
 	g.snapshotBuffer = make([]*game.Snapshot, 0)
-	pos = g.playerInterpolation(player)
+	pos = g.playerInterpolation(nil, nil, 1, player)
 	require.Equal(t, pos, player.Position)
 
 	// Test: no found second snapshot
@@ -170,7 +170,7 @@ func TestInterpolationFromSnapshot(t *testing.T) {
 		},
 	}
 	player.Position = gmath.Vec{X: 10, Y: 10}
-	pos = g.playerInterpolation(player)
+	pos = g.playerInterpolation(g.snapshotBuffer[0], g.snapshotBuffer[1], 1, player)
 	require.Equal(t, pos, player.Position)
 
 	// Test: fractional alpha test
@@ -205,7 +205,7 @@ func TestInterpolationFromSnapshot(t *testing.T) {
 			},
 		},
 	}
-	pos = g.playerInterpolation(player)
+	pos = g.playerInterpolation(g.snapshotBuffer[0], g.snapshotBuffer[1], 0.25, player)
 	require.Equal(t, float64(2), pos.X)
 
 	// TODO: Test: snapshot not contain player

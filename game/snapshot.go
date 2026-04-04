@@ -34,6 +34,7 @@ type ProjectileState struct {
 type Snapshot struct {
 	Tick          uint32
 	LastInputTick uint32
+	Full          uint8
 	Players       []PlayerState
 	Projectiles   []ProjectileState
 }
@@ -45,6 +46,8 @@ func (s *Snapshot) Encode(buf []byte) (int, error) {
 	offset += 4
 	binary.BigEndian.PutUint32(buf[offset:], s.LastInputTick)
 	offset += 4
+	buf[offset] = s.Full
+	offset += 1
 
 	// uint16 for len(players)
 	binary.BigEndian.PutUint16(buf[offset:], uint16(len(s.Players)))
@@ -88,6 +91,8 @@ func (s *Snapshot) Decode(data []byte) error {
 	offset += 4
 	s.LastInputTick = binary.BigEndian.Uint32(data[offset:])
 	offset += 4
+	s.Full = data[offset]
+	offset += 1
 	counter := binary.BigEndian.Uint16(data[offset:])
 	offset += 2
 	s.Players = make([]PlayerState, counter)
