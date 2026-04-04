@@ -14,7 +14,7 @@ func (g *Game) Init() {
 	g.Width, g.Height = ebiten.WindowSize()
 	g.players = make(map[game.PlayerID]*Player)
 	g.projectiles = make(map[uint32]*Bullet)
-	network, err := network.NewClient(os.Getenv("CL_HOST"), os.Getenv("CL_PORT"), []byte(os.Getenv("ENC_KEY")))
+	network, err := network.NewClient(os.Getenv("S_HOST"), os.Getenv("S_PORT"))
 	if err != nil {
 		// TODO: think about reconnect to server
 		panic(err)

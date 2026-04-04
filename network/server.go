@@ -3,8 +3,8 @@ package network
 import (
 	"sync"
 
-	"github.com/TaRosh/online_mover/udp/host"
 	"github.com/TaRosh/online_mover/game"
+	"github.com/TaRosh/online_mover/udp/host"
 )
 
 const TickRate = 1
@@ -24,7 +24,7 @@ type server struct {
 
 var _ NetworkServer = new(server)
 
-func NewServer(hst, port string, secretKey []byte) (*server, error) {
+func NewServer(hst, port string) (*server, error) {
 	serv := server{
 		connToPlayer:     map[uint32]game.PlayerID{},
 		playerToConn:     map[game.PlayerID]uint32{},

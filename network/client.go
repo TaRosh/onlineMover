@@ -8,7 +8,7 @@ type client struct {
 	transport host.ClientHost
 }
 
-func NewClient(h, port string, secretKey []byte) (*client, error) {
+func NewClient(h, port string) (*client, error) {
 	c := client{}
 	transport, err := host.NewClient(h, port)
 	if err != nil {
