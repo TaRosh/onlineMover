@@ -1,0 +1,19 @@
+
+//kage:unit pixels
+
+package main
+
+var Time float
+
+func Fragment(dstPos vec4, _ vec2, _ vec4) vec4 {
+pos := dstPos.xy / imageDstSize()
+pos = vec2(pos.x, 1 - pos.y)
+left := step(0.1, pos.x)
+bottom := step(0.1, pos.y)
+right := step(0.1, 1-pos.x)
+top := step(0.1, 1 -pos.y)
+
+color := vec3(left*bottom *right* top)
+
+return vec4(color, 1)
+}

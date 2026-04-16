@@ -1,0 +1,46 @@
+//kage:unit pixels
+
+package main
+
+var Time float
+var Radius float
+var Color vec3
+
+func random(st vec2) float {
+return fract(sin(dot(st.xy, vec2(12.9898, 78.233))) * 43758.5453123)
+}
+
+func noise(st vec2) float {
+i := floor(st)
+f := fract(st)
+a := random(i)
+b := random(i + vec2(1.0, 0.0))
+c := random(i + vec2(0, 1))
+d := random(i +vec2(1, 1))
+u := f*f*(3 -2 * f)
+return mix(a, b, u.x) + (c -a) * u.y * (1-u.x) + (d-b) * u.x * u.y
+}
+
+func Fragment(dstPos vec4, texCoord vec2, _ vec4) vec4 {
+// distance(p0, p1 T) float
+pos :=  texCoord.xy
+canvas := imageDstSize()
+dis := distance(canvas/2, pos)
+if dis < Radius {
+pos =  2 *pos / canvas - 1
+pos = pos * Time
+n := noise(pos)
+planet := vec3(0.64, 0.65, 0.76)
+hight := vec3(0.23, 0.25, 0.37)
+other := vec3(0.3, 0.41, 0.52)
+
+
+
+color := mix(planet, hight, smoothstep(0.3, 0.4, n))
+color = mix(color, other, smoothstep(0.4, 0.6, n))
+return vec4(color, 1)
+}
+return vec4(0)
+
+
+}

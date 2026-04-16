@@ -2,6 +2,8 @@ package game
 
 import (
 	"encoding/binary"
+
+	"github.com/TaRosh/online_mover/game/entities"
 )
 
 const (
@@ -14,7 +16,7 @@ const (
 
 // Input size total is 5 bytes
 type Input struct {
-	ID      PlayerID
+	ID      entities.PlayerID
 	Tick    uint32
 	Buttons uint8
 }
@@ -33,7 +35,7 @@ func (i *Input) Encode(buf []byte) (int, error) {
 
 func (i *Input) Decode(data []byte) error {
 	var offset int
-	i.ID = PlayerID(binary.BigEndian.Uint32(data[offset:]))
+	i.ID = entities.PlayerID(binary.BigEndian.Uint32(data[offset:]))
 	offset += 4
 	i.Tick = binary.BigEndian.Uint32(data[offset:])
 	offset += 4

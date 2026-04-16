@@ -1,0 +1,19 @@
+//kage:unit pixels
+
+package main
+
+var Time float
+
+func random(st vec2) float {
+return fract(sin(dot(st.xy, vec2(12.9898, 78.233))))
+}
+
+func Fragment(dstPos vec4, _ vec2, _ vec4) vec4 {
+pos := dstPos.xy / imageDstSize()
+pos = vec2(pos.x, 1 - pos.y)
+pos = pos * 10
+ipos := floor(pos)
+color:= vec3(random(ipos))
+
+return vec4(color, 1)
+}

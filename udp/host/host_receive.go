@@ -24,7 +24,7 @@ func (h *host) receive(conn *inner.Conn, data []byte, packet *p.Packet) error {
 	}
 
 	// 1. Decode packet
-	fmt.Printf("RECV packet: %+v\n", packet)
+	// fmt.Printf("RECV packet: %+v\n", packet)
 
 	err = h.handleConn[conn.GetEncryptionState()](conn, packet, data)
 	// if packet corrupted we can't get full headers -> return
@@ -60,7 +60,7 @@ func (h *host) receive(conn *inner.Conn, data []byte, packet *p.Packet) error {
 
 	// 3. Reliability
 	// here packet decoded and decrypted
-	fmt.Printf("RECV packet: %+v\n", packet)
+	// fmt.Printf("RECV packet: %+v\n", packet)
 	if conn.ProcessHeaders(packet.Header) {
 		return fmt.Errorf("host:receive: %w", ErrDuplicatePacket)
 	}

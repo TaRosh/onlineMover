@@ -1,7 +1,6 @@
 package network
 
 import (
-	"fmt"
 	"log"
 
 	"github.com/TaRosh/online_mover/game"
@@ -21,7 +20,7 @@ func (c *client) Receive(snapshots chan<- game.Snapshot, events chan<- game.Even
 		}
 	}()
 	for packet := range sendPacketHere {
-		fmt.Println("RECEIVE packet", packet.String())
+		// fmt.Println("RECEIVE packet", packet.String())
 		c.processPacket(&packet, snapshots, events)
 	}
 }

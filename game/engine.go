@@ -1,10 +1,13 @@
 package game
 
-import "github.com/quasilyte/gmath"
+import (
+	"github.com/TaRosh/online_mover/game/entities"
+	"github.com/quasilyte/gmath"
+)
 
-const speed = 2
+const speed = 5
 
-func ApplyInput(p *Player, input Input) {
+func ApplyInput(p *entities.Player, input Input) {
 	var force gmath.Vec
 	if input.Buttons&InputLeft != 0 {
 		force.X = -speed

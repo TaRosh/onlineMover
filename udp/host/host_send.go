@@ -38,7 +38,7 @@ func (h *host) send(conn *inner.Conn, t packet.Type, data []byte, writeFn func([
 	var err error
 	var n int
 
-	fmt.Printf("SENT packet: %+v\n", pack)
+	// fmt.Printf("SENT packet: %+v\n", pack)
 	// send raw or encrypted packet
 	if conn.GetEncryptionState() != inner.Secure {
 

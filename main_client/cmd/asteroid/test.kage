@@ -1,0 +1,20 @@
+//kage:unit pixels
+
+package main
+
+var Time float
+
+func Fragment(dstPos vec4, _ vec2, _ vec4) vec4 {
+colorA := vec3(0,1,0)
+colorB := vec3(1, 0,0)
+pos := dstPos.xy / imageDstSize()
+pos = vec2(pos.x, 1 - pos.y)
+//pct := abs(sin(Time))
+pct := abs(1 -cos((Time * 3.14)/ 2))
+color := mix(colorA, colorB, pct)
+
+return vec4(color, 1)
+
+
+
+}

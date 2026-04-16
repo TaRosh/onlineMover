@@ -1,0 +1,17 @@
+//kage:unit pixels
+
+package main
+func plot(st vec2, pct float) float {
+return smoothstep(pct - 0.02, pct, st.y) - smoothstep(pct, pct+0.02, st.y)
+}
+
+
+func Fragment(dstPos vec4, texCoord vec2, _ vec4) vec4 {
+pos := dstPos.xy / imageDstSize()
+pos = vec2(pos.x, 1 - pos.y)
+y := pow(pos.x, 5)
+color := vec3(y)
+pct := plot(pos, y)
+color = (1.0-pct)*color + pct*vec3(0.0, 1.0, 0.0)
+return vec4(color, 1.0)
+}

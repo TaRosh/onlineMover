@@ -1,0 +1,10 @@
+go 1.26.1
+
+use (
+	./game
+	./main_client
+	./main_server
+	./network
+	./quad_tree
+	./udp
+)

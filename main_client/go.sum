@@ -18,6 +18,10 @@ github.com/quasilyte/gmath v0.0.0-20250817142619-e0a8c6ee09b3 h1:AMY+EwOLRJdrOZ/
 github.com/quasilyte/gmath v0.0.0-20250817142619-e0a8c6ee09b3/go.mod h1:EbI+KMbALSVE2s0YFOQpR4uj66zBh9ter5P4CBMSuvA=
 github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
+github.com/yohamta/ganim8/v2 v2.1.30 h1:9yix1mx/VYyDy7J277WCqizQW0qqSIoIbLXeQh/upLg=
+github.com/yohamta/ganim8/v2 v2.1.30/go.mod h1:TyKLLUSwEGzsz6DcsoTHvNyqOz/HyvqWynQye9J/m2A=
+golang.org/x/exp v0.0.0-20221126150942-6ab00d035af9 h1:yZNXmy+j/JpX19vZkVktWqAo7Gny4PBWYYK3zskGpx4=
+golang.org/x/exp v0.0.0-20221126150942-6ab00d035af9/go.mod h1:CxIveKay+FTh1D0yPZemJVgC/95VzuuOLq5Qi4xnoYc=
 golang.org/x/image v0.31.0 h1:mLChjE2MV6g1S7oqbXC0/UcKijjm5fnJLUYKIYrLESA=
 golang.org/x/image v0.31.0/go.mod h1:R9ec5Lcp96v9FTF+ajwaH3uGxPH4fKfHHAVbUILxghA=
 golang.org/x/sync v0.17.0 h1:l60nONMj9l5drqw6jlhIELNv9I0A4OFgRsG9k2oT9Ug=

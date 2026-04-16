@@ -1,0 +1,20 @@
+//kage:unit pixels
+
+package main
+
+func draw_circle(uv vec2, size float) float{
+dist := length(uv)
+return clamp(dist/size, 0, 1)
+}
+
+
+
+func Fragment(_ vec4, texCoord  vec2, _ vec4) vec4 {
+pos := texCoord / imageDstSize()
+//pos *= 1100
+pos -= 0.5
+//pos.x *=pos.x / pos.y
+pos.x *= imageDstSize().x / imageDstSize().y
+color := vec3(draw_circle(pos, 0.1))
+return vec4(color, 1)
+}

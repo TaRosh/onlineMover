@@ -1,0 +1,17 @@
+//kage:unit pixels
+
+
+package main
+
+var HP float
+
+func Fragment(_ vec4, texCoord vec2, _ vec4) vec4 {
+c := imageSrc0At(texCoord)
+mask := imageSrc1At(texCoord)
+return mix(c,mask, 1.0 -HP)
+//if c.a != 0.0 && mask.a != 0.0 {
+//a := clamp(HP+(1.0-mask.a), 0.0, 1.0)
+//return vec4(c.r *a, c.g*a, c.b*a, c.a)
+//}
+//return c
+}

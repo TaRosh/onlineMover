@@ -1,10 +1,8 @@
 package network
 
 import (
-	"fmt"
-
-	p "github.com/TaRosh/online_mover/udp/packet"
 	"github.com/TaRosh/online_mover/game"
+	p "github.com/TaRosh/online_mover/udp/packet"
 )
 
 func (s *server) processPacket(packet *p.Packet, inputHere chan<- game.Input, events chan<- game.Event) {
@@ -28,27 +26,8 @@ func (s *server) processPacket(packet *p.Packet, inputHere chan<- game.Input, ev
 			return
 		}
 		id := s.newConnection(connID)
-		events <- game.Event{
-			Type: game.EventConnection,
-			ID:   id,
-		}
-		playerPacketWithID := PlayerIDPacket{
-			ID: uint32(id),
-		}
-		n, err := playerPacketWithID.Encode(s.sentBuf)
-		if err != nil || n == 0 {
-			// TODO: think about it
-			panic(err)
-		}
-
-		fmt.Println("write to player", id)
-		err = s.sentPlayerID(connID, s.sentBuf[:n])
-		// TODO: think what should do?
-		// maybe resend becouse player don't get his id
-		// but we allready add him to our game
-		// some backup plan to remove if can't sand id
-		if err != nil {
-			panic(err)
+		events <- game.EventInitConnection{
+			ID: id,
 		}
 	case p.Input:
 

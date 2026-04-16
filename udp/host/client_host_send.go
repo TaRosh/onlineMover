@@ -44,7 +44,6 @@ func (ch *clientHost) Send(t packet.Type, data []byte) error {
 	}
 	// TODO: don't forgot send all packet from queue
 	// when connection change state to secure
-	fmt.Println("CONNECTION SECURE", ch.connection.GetEncryptionState().String())
 	err = ch.send(ch.connection, t, data, ch.write)
 	return err
 }

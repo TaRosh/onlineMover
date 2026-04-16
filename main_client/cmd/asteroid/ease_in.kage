@@ -1,0 +1,24 @@
+//kage:unit pixels
+
+package main
+
+var Time float
+
+func easeIn(t float) float{
+return 1 - sqrt(1 - pow(t, 2))
+
+}
+
+func easeOut(t float) float {
+return sqrt(pow(1 - t, 2))
+}
+
+func Fragment(dstPos vec4, texCoord vec2, _ vec4) vec4 {
+//pos :=  dstPos.xy / imageDstSize()
+//t := mod(Time/5, 1)
+v := sin(Time)
+
+
+color := vec3(v)
+return vec4(color, 1)
+}

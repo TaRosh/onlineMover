@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"github.com/TaRosh/online_mover/game"
+	"github.com/TaRosh/online_mover/game/entities"
 	"github.com/TaRosh/online_mover/udp/host"
 )
 
@@ -13,10 +14,10 @@ type server struct {
 	transport host.ServerHost
 	// maybe player ID -> connection id -> get to transport layer
 	// and connection id to  palyer id -> to game layer
-	connToPlayer map[uint32]game.PlayerID
-	playerToConn map[game.PlayerID]uint32
+	connToPlayer map[uint32]entities.PlayerID
+	playerToConn map[entities.PlayerID]uint32
 	// next connection ID which will be player Id
-	nextConnectionID game.PlayerID
+	nextConnectionID entities.PlayerID
 	sentBuf          []byte
 
 	mu sync.RWMutex
@@ -26,8 +27,8 @@ var _ NetworkServer = new(server)
 
 func NewServer(hst, port string) (*server, error) {
 	serv := server{
-		connToPlayer:     map[uint32]game.PlayerID{},
-		playerToConn:     map[game.PlayerID]uint32{},
+		connToPlayer:     map[uint32]entities.PlayerID{},
+		playerToConn:     map[entities.PlayerID]uint32{},
 		nextConnectionID: 0,
 
 		sentBuf: make([]byte, 1200),
@@ -43,7 +44,7 @@ func NewServer(hst, port string) (*server, error) {
 }
 
 // DeleteConn(id *net.UDPAddr)
-func (s *server) DeletePlayer(id game.PlayerID) {
+func (s *server) DeletePlayer(id entities.PlayerID) {
 	s.transport.DeleteConn(s.playerToConn[id])
 }
 
@@ -57,9 +58,7 @@ func (s *server) CheckTimeouts(events chan<- game.Event) {
 
 	go s.transport.CheckTimeouts(disconnectedConnection)
 	for id := range disconnectedConnection {
-		events <- game.Event{
-			Type: game.EventNoAnswerFromClient,
-
+		events <- game.EventNoAnswerFromClient{
 			ID: s.connToPlayer[id],
 		}
 	}
@@ -72,7 +71,7 @@ func (s *server) isPlayerExist(id uint32) bool {
 	return exist
 }
 
-func (s *server) isConnectionExist(id game.PlayerID) bool {
+func (s *server) isConnectionExist(id entities.PlayerID) bool {
 	s.mu.RLock()
 	_, exist := s.playerToConn[id]
 	defer s.mu.RUnlock()
@@ -80,7 +79,7 @@ func (s *server) isConnectionExist(id game.PlayerID) bool {
 }
 
 // set two maps and increment id counter
-func (s *server) newConnection(connID uint32) game.PlayerID {
+func (s *server) newConnection(connID uint32) entities.PlayerID {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	id := s.nextConnectionID
